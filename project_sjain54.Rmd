@@ -1,0 +1,304 @@
+---
+title: 'STAT 420: Final Project'
+author: "Spring 2019, S. Jain"
+output:
+  html_document:
+    theme: readable
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+library(corrplot)
+library(gvlma)
+library(car)
+library(leaps)
+library(lmtest)
+library(MASS)
+calc_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+```
+
+## Contents
+
+```{r, echo = FALSE}
+fullData = read.csv("Disease Data.csv")
+names = colnames(fullData)[2:22]
+fullData <- subset(fullData, select = names)
+```
+
+### Summary and Analysis Plan
+
+We have to predict the severity of a disease based on the different genes of a person. Since there are no categorical values in our entire dataset, we will train different linear regression models to achieve our task;  our models will include the full additive model and we will develop on it based on the different techniques learned over the course of the semester to find the `best` model that also satisfies all the assumptions of a linear regression model. 
+
+### Summary statistics and Data Visualization
+
+There are a total of 21 variables in our data of 290 observations, out of which 20 are predictor variables. 
+
+The response variable is: 
+
+1. Disease Severity : Numerical Variable, No NULL values
+
+The predictor variables are:
+
+1. PCDH12 : Numerical Variable, No NULL values
+2. DLG5: Numerical Variable, No NULL values
+3. BC038559: Numerical Variable, No NULL values
+4. SHISA5: Numerical Variable, No NULL values
+5. AF161342: Numerical Variable, No NULL values
+6. CARKD: Numerical Variable, No NULL values
+7. F2R: Numerical Variable, No NULL values
+8. PHKG1: Numerical Variable, No NULL values
+9. CDCP1: Numerical Variable, No NULL values
+10. PLEKHM1: Numerical Variable, No NULL values
+11. SMC2: Numerical Variable, No NULL values
+12. PSMB6: Numerical Variable, No NULL values
+13. BX440400: Numerical Variable, No NULL values
+14. A_24_P936373: Numerical Variable, No NULL values
+15. PPAN: Numerical Variable, No NULL values
+16. BC007917: Numerical Variable, No NULL values
+17. C14orf143: Numerical Variable, No NULL values
+18. LOC440104: Numerical Variable, No NULL values
+19. THC2578957: Numerical Variable, No NULL values
+20. ANKIB1: Numerical Variable, No NULL values
+
+
+```{r}
+summary(fullData)
+```
+
+
+
+Scatterplot matrix:
+
+```{r, echo=FALSE}
+par(mfrow=c(3,4))
+plot(Disease.Severity~PCDH12, data = fullData)
+plot(Disease.Severity~DLG5, data = fullData)
+plot(Disease.Severity~BC038559, data = fullData)
+plot(Disease.Severity~SHISA5, data = fullData)
+plot(Disease.Severity~AF161342, data = fullData)
+plot(Disease.Severity~CARKD, data = fullData)
+plot(Disease.Severity~F2R, data = fullData)
+plot(Disease.Severity~PHKG1, data = fullData)
+plot(Disease.Severity~CDCP1, data = fullData)
+plot(Disease.Severity~PLEKHM1, data = fullData)
+plot(Disease.Severity~SMC2, data = fullData)
+plot(Disease.Severity~PSMB6, data = fullData)
+```
+```{r, echo = FALSE}
+par(mfrow=c(2,4))
+plot(Disease.Severity~BX440400, data = fullData)
+plot(Disease.Severity~PPAN, data = fullData)
+plot(Disease.Severity~BC007917, data = fullData)
+plot(Disease.Severity~C14orf143, data = fullData)
+plot(Disease.Severity~LOC440104, data = fullData)
+plot(Disease.Severity~THC2578957, data = fullData)
+plot(Disease.Severity~ANKIB1, data = fullData)
+plot(Disease.Severity~A_24_P936373, data = fullData)
+```
+
+The scatterplots above show us how each predictor variable maps out with the Disease.Severity response variable. This is useful in gauging which variables might be of use to us, and shows individual trends in their relationships. 
+
+The correlation between all the variables amongst themselves is mapped in the correlation plot below. 
+
+Correlation Plot:
+
+```{r}
+M<-cor(fullData)
+corrplot(M,type="upper")
+```
+
+The correlation plot gives us some idea about which variables might be useful in predicting disease severtiy but we will run our own tests and see if we can find the best model. 
+
+### Full Additive Model
+
+```{r}
+full_model = lm(Disease.Severity~.,data = fullData)
+summary(full_model)
+```
+
+```{r}
+#Mean of residuals:
+mean(full_model$residuals)
+#Maximum VIF value
+(max(vif_vals = vif(full_model)))
+```
+
+We can see from the above analysis that the model operates at a Multiple R Squared value of 0.5611 and shows that only 9 out of the 20 variables are significant at a 5% significance level. 
+
+We also note that the mean of the residuals is near 0 and there is no variable with a VIF value over 5. 
+
+### Model/Variable Selection
+
+Now we will attempt to eliminate some variables that are not useful to our model. 
+
+Backward, forward, and stepwise search are all useful, but do have an obvious issue. By not checking every possible model, sometimes they will miss the best possible model.
+So we go with using the exhaustive search method. This algorithm compares models at each step by removing and adding variables to find the `best` model. 
+
+```{r}
+#Running the exhaustive search algorithm
+all_full_mod = summary(regsubsets(Disease.Severity ~ ., data = fullData, nvmax = NULL))
+p = length(coef(full_model))
+n = length(resid(full_model))
+```
+
+Finding and training the model with the most adjusted R Squared value: 
+```{r}
+best_r2_ind = which.max(all_full_mod$adjr2)
+#all_full_mod$which[best_r2_ind, ]
+model_R2 = lm(Disease.Severity~PCDH12+DLG5+AF161342+CARKD+F2R+PHKG1+PLEKHM1+SMC2+PSMB6+A_24_P936373+C14orf143+LOC440104+THC2578957, data = fullData)
+```
+
+Finding and training the model with the least AIC value:
+```{r}
+full_mod_aic = n * log(all_full_mod$rss / n) + 2 * (2:p)
+best_aic_ind = which.min(full_mod_aic)
+#all_full_mod$which[best_aic_ind,]
+model_aic = lm(Disease.Severity~PCDH12+DLG5+AF161342+CARKD+F2R+PHKG1+PLEKHM1+SMC2+PSMB6+A_24_P936373+C14orf143+LOC440104, data = fullData)
+```
+
+Finding and training the model with the least BIC value:
+```{r}
+#Getting the indices of the model with the minimum BIC value
+full_mod_bic = n * log(all_full_mod$rss / n) + log(n) * (2:p)
+best_bic_ind = which.min(full_mod_bic)
+#all_full_mod$which[best_bic_ind,]
+model_bic = lm(Disease.Severity~DLG5+AF161342+F2R+PLEKHM1+SMC2+PSMB6+A_24_P936373+LOC440104, data = fullData)
+```
+
+Here , we find 3 models using the exhaustive search algorithm. There 3 models correspond to a model with the most Adjusted R Squared value, least AIC value and the least BIC value respectively. 
+
+We can now alculate the LOOCV-RMSE for each of these models and the full model. This will give us the `best` model to use. 
+
+```{r}
+calc_loocv_rmse(model_R2)
+```
+
+```{r}
+calc_loocv_rmse(model_aic)
+```
+
+```{r}
+calc_loocv_rmse(model_bic)
+```
+
+```{r}
+calc_loocv_rmse(full_model)
+```
+
+The LOOCV-RMSE values above are for all 4 models: model with the best R Squared value, model with the best AIC value, model with the best BIC value and the full additive model. 
+
+This tells us that the best model to use is the model with the lower BIC value which uses 8 predictor variables which are the following:
+
+```{r}
+all_full_mod$which[best_bic_ind,]
+```
+
+Thus this is our `best` model. 
+
+### Model Diagnosis
+
+```{r}
+par(mfrow=c(2,2))
+plot(model_bic)
+```
+
+The Residual vs Fitted Plot shows that the residuals don't exactly lie equally on both sides of the line, which says that our model may violate the constance variance condition. 
+
+Similarly, the Normal Q-Q plot shows that the residuals don't exactly follow a straight line, violating the constance variance condition. 
+
+We can confirm these with the Breusch Pagan test and the Shapiro Wilk test. 
+
+```{r}
+shapiro.test(resid(model_bic))
+```
+
+So the small p-value says that the residuals do not follow a normal curve. 
+
+```{r}
+bptest(model_bic)
+```
+
+However, it looks like our residuals do have equal variance proved by the large p-value. 
+
+We can check if any of the predictor variables are correlated by calculating the VIF values:
+
+```{r}
+vif(model_bic)
+```
+
+Since none of the VIF values are greater than 5, none of the predictor variables are correlated to one another and we are good. 
+
+We can perform the Box-Cox transformation method to improve our model so it does not violate the assumptions. 
+
+```{r}
+boxcox(model_bic, lambda = seq(-0.5, 0.1, by = 0.05), plotit = TRUE)
+
+model_box = lm(((Disease.Severity^-0.29)-1)/(-0.29)~DLG5+AF161342+F2R+PLEKHM1+SMC2+PSMB6+A_24_P936373+LOC440104, data = fullData)
+
+bptest(model_box)
+shapiro.test(model_box$residuals)
+```
+
+This model gives us a much better value for the Shapiro Wilk Test for normality of errors however it still violates some assumptions, we will see if we can improve our model by handling influential points and outliers. 
+
+<!-- We can see that these outliers are present in our data as their Residual Standard Error is greater than 2:  -->
+<!-- ```{r} -->
+<!-- rstandard(model_bic)[abs(rstandard(model_bic)) > 2] -->
+<!-- ``` -->
+
+<!-- Similary, we can see that these points are of high leverage based on their hat matrix values:  -->
+<!-- ```{r, eval = FALSE} -->
+<!-- hatvalues(model_bic) > 2 * mean(hatvalues(model_bic)) -->
+<!-- ``` -->
+
+So we can find the points that are highly influential based on their Cook's distance which is a heuristic that takes account of both Outliers and High Leverage points: 
+```{r}
+which(cooks.distance(model_bic) > 4 / length(cooks.distance(model_bic)))
+```
+
+So we can train a new model without these points and see how it fares. 
+
+```{r}
+model_box_cooks = cooks.distance(model_box)
+model_box2 = lm(((Disease.Severity^-0.29)-1)/(-0.29)~DLG5+AF161342+F2R+PLEKHM1+SMC2+PSMB6+A_24_P936373+LOC440104, data = fullData, subset = model_box_cooks <= 4 / length(model_box_cooks))
+```
+
+We can check the assumptions from the Fitted vs Residuals and the Normal Q-Q plots. And confirm the results using the Breusch-Pagan and Shapiro Wilk test as well. 
+
+```{r}
+par(mfrow=c(2,2))
+plot(model_box2)
+```
+
+
+```{r}
+bptest(model_box2)
+shapiro.test(model_box2$residuals)
+```
+
+```{r}
+mean(model_box2$residuals)
+```
+
+Now that we have checked our model for the assumptions, we can check if it is indeed better than the other modesls. We can compare the LOOCV-RMSE as we have done before between the untranformed and the transformed model. 
+
+```{r}
+calc_loocv_rmse(model_bic)
+```
+
+```{r}
+calc_loocv_rmse(model_box2)
+```
+
+We see that there is a huge difference the LOOCV-RMSE of the two models, mainly due to the fact that we have removed the entries that had the highest deviation from the regression line. 
+
+This tells us that our `model_box2` model does not violate any assumptions, and so we can stop here. We have transformed our `best` model that had the best LOOCV-RMSE and improved it so it does not violate any assumptions. 
+
+This model fits the same predictor variables but to a power of the response variable without points that are highly influential. 
+
+
+
+
